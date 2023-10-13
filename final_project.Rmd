@@ -1,0 +1,70 @@
+---
+title: "ML_proj"
+author: "ant-lah"
+date: "2023-10-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prediction assignment
+
+Given data from accelerometers attached to 6 users' belt, forearm, arm, and dumbell, classify their barbell lifts into one of 5 classes (A/B/C/D/E).
+
+### Load data
+
+```{r}
+training <- read.csv("C:/Users/Anton/Documents/Drive/extra studies/R/datasciencecoursera/ML_proj/pml-training.csv")
+testing <- read.csv("C:/Users/Anton/Documents/Drive/extra studies/R/datasciencecoursera/ML_proj/pml-testing.csv")
+```
+
+### Exploratory analysis
+
+```{r eval=FALSE}
+table(training$classe)
+table(testing$classe)
+dim(training)
+#checking for NAs
+sapply(training, function(x) sum(is.na(x)))
+sapply(testing, function(x) sum(is.na(x)))
+View(training)
+View(testing)
+```
+
+The training data is given as a time series, with the new_window variable indicating the start of a new segment, at which point some summary statistics are provided that are otherwise populated by NAs. The test data, however, is not; to make reliable predictions on the test data, I will omit these summary columns (easily identifiable as they are all NA in the test data). I will also omit the first 7 columns, since indexing and timestamp values are trivially correlated with the exercise classification (an earlier attempt where I included these columns yielded a .9997 prediction accuracy on the validation set, but predicted all A's on the test set). The testing set comes without the exercise class variable; to be able to rate and compare different prediction models, I will split the original training data into a new training and a validation sets.
+
+### Model training
+
+```{r}
+#preprocessing: dropping the variables that are altogether NA in the test dataset
+empty_test_vars <- sapply(testing, function(x) sum(is.na(x))) == 20
+#also dropping variables 1:7, which easily identify the cases
+empty_test_vars[1:7] <- T
+
+train_trunc <- training[, !empty_test_vars]
+test_trunc <- testing[, !empty_test_vars]
+
+library(caret)
+
+newTrain <- createDataPartition(y=train_trunc$classe, p = .8, list = F)
+trainT <- train_trunc[newTrain,]
+trainV <- train_trunc[-newTrain,]
+
+modTree <- train(classe ~ ., data = trainT, method = "rpart")
+predTree <- predict(modTree, trainV)
+confusionMatrix(predTree, factor(trainV$classe))
+
+modTreeBag <- train(classe ~ ., data = trainT, method = "treebag")
+predTreeBag <- predict(modTreeBag, trainV)
+confusionMatrix(predTreeBag, factor(trainV$classe))
+
+#predict(modTree, testing)
+predict(modTreeBag, testing)
+
+```
+
+A simple tree model yielded a .55 accuracy. A bagged tree model using the "Treebag" algorithm gave a near perfect .99 accuracy, and was hence chosen for the prediction quiz. I also attempted to run a random forest model and a boosted tree model, but they were taking too long to complete.
+
+Since I used my validation set to decide between models, I expect to see lower accuracy on a true out-of-sample test. I got 100% on the quiz, but since it had only 20 datapoints, an accuracy rating above 95% may be expected to yield a perfect score--or perhaps I just got lucky.
